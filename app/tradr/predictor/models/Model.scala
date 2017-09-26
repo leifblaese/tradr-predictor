@@ -12,10 +12,10 @@ trait Model {
 
   /**
     * Train the coefficients of a model for a given frame
-    * @param tradeString
+    * @param json
     * @return
     */
 
-  def train(tradeString: String): Model
+  def train(json: String): Model
 
 }

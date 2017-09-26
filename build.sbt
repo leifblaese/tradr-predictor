@@ -8,7 +8,8 @@ lazy val libdeps = Seq(
   "org.nd4j" % "nd4j-native-platform" % "0.9.1",
   "com.typesafe" % "config" % "1.3.1",
   "com.datastax.oss" % "java-driver-parent" % "4.0.0-alpha1" pomOnly(),
-  "com.datastax.oss" % "java-driver-core" % "4.0.0-alpha1"
+  "com.datastax.oss" % "java-driver-core" % "4.0.0-alpha1",
+  "org.specs2" % "specs2_2.11" % "3.7" % "test" pomOnly()
 )
 
 

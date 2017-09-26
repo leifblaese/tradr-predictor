@@ -12,6 +12,7 @@ import tradr.common.trading.Trade
 import tradr.common.PricingPoint
 import tradr.common.predictor.PredictorResult
 import tradr.predictor.models.Model
+import tradr.predictor.models.a3c.A3CModel.{computeGradientMap, toGradient}
 
 import scala.collection.mutable
 import collection.JavaConverters._
@@ -49,7 +50,7 @@ object A3CModel {
     * @param profit
     * @return
     */
-  private[this] def computeGradientMap(network: ComputationGraph,
+  def computeGradientMap(network: ComputationGraph,
                                        trade: Trade,
                                        gamma: Double,
                                        profit: Double): mutable.Map[String, INDArray] = {
@@ -98,33 +99,12 @@ object A3CModel {
     initialGradient
   }
 
-//  Old ND4j based update rule
-  //          val actionProb = Nd4j.create(partialTrade.actionProbabilities)
-
-  //          val actionProb = partialTrade.actionProbabilities
-  //          val valuePred = partialTrade.valuePrediction
-  //
-  //          val logActionProg = Nd4j.getExecutioner.execAndReturn(new Log(actionProb))
-  //          val actionProbError = logActionProg.mul(R - valuePred)
-  //          val valueFunError = Nd4j.create(Array(Math.pow(R-valuePred, 2.0)))
-  //
-  //          val currentGradient: Gradient = network.backpropGradient(actionProbError, valueFunError)
-  //          val gradForVar = currentGradient.gradientForVariable()
-  //          gradForVar.asScala.foreach{
-  //            case (key, grad) =>
-  //              if (!initialGradient.contains(key)) {
-  //                initialGradient.update(key, grad)
-  //              } else {
-  //                initialGradient.update(key, initialGradient(key).add(grad))
-  //              }
-  //          }
-
   /**
     * Compute the gradient for a given gradient map
     * @param gradientMap
     * @return
     */
-  private[this] def toGradient(gradientMap: collection.mutable.Map[String, INDArray]):
+  def toGradient(gradientMap: collection.mutable.Map[String, INDArray]):
   DefaultGradient = {
 
     val gradient = new DefaultGradient()
@@ -134,22 +114,6 @@ object A3CModel {
     gradient
   }
 
-  /**
-    * Train the network on one complete Trade (i.e. sequence of buys and sells).
-    * Unit return because memory is updated in place
-    * @param a3c
-    * @param trade
-    */
-  def train(a3c: A3CModel, trade: Trade): Unit = {
-    val network = a3c.network
-    // Get a partial trade
-    val partialTrade = trade.tradeSequence.head
-
-    val profit = Trade.computeProfit(trade)
-    val gradientMap = computeGradientMap(a3c.network, trade, a3c.gamma, profit)
-    val gradient = toGradient(gradientMap)
-    network.update(gradient)
-  }
 
 }
 
@@ -175,15 +139,46 @@ case class A3CModel(network: ComputationGraph,
       .toMap
   }
 
+//  /**
+//    * Train the network on one complete Trade (i.e. sequence of buys and sells).
+//    * Unit return because memory is updated in place
+//    * @param a3c
+//    * @param trade
+//    */
+//  def train(a3c: A3CModel, trade: Trade): Unit = {
+//    val network = a3c.network
+//    // Get a partial trade
+//    val partialTrade = trade.tradeSequence.head
+//
+//    val profit = Trade.computeProfit(trade)
+//    val gradientMap = computeGradientMap(a3c.network, trade, a3c.gamma, profit)
+//    val gradient = toGradient(gradientMap)
+//    network.update(gradient)
+//  }
 
+  /**
+    * Train the model on a given trade
+    * @param json
+    * @return
+    */
+  def train(json: String): Model = {
+    val trade = Json.parse(json).as[Trade]
 
-  def train(tradeString: String): Model = {
-//    val trade = Json.fromJson[Trade](Json.parse(tradeString))
-
-
-
+    val partialTrade = trade.tradeSequence.head
+    val profit = Trade.computeProfit(trade)
+    val gradientMap = computeGradientMap(network, trade, gamma, profit)
+    val gradient = toGradient(gradientMap)
+    network.update(gradient)
 
     this
   }
-
 }
+
+
+
+
+
+
+
+
+

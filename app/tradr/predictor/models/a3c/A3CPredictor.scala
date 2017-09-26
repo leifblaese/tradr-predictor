@@ -19,6 +19,7 @@ import org.nd4j.linalg.factory.Nd4j
 import play.api.libs.json.Json
 import tradr.common.PricingPoint
 import tradr.common.predictor.PredictorResult
+import tradr.common.trading.Trade
 import tradr.predictor.models.{Model, Predictor}
 
 import scala.collection.JavaConverters._
@@ -128,9 +129,7 @@ object A3CPredictor extends Predictor {
   }
 
 
-
-
-  private[this] def getCassandraCluster(conf: Config) = {
+  def getCassandraCluster(conf: Config) = {
 
     val cassandraIp = conf.getString("cassandra.ip")
     val cassandraPort = conf.getString("cassandra.connectorPort").toInt
@@ -147,7 +146,7 @@ object A3CPredictor extends Predictor {
   /**
     * Convert the data from cassandra into a (multidimensional) frame
     */
-  private[this] def convertToFrame(pricingPoints: Seq[PricingPoint]) = {
+  def convertToFrame(pricingPoints: Seq[PricingPoint]) = {
     pricingPoints
       .sortBy(p => p.timestamp)
       .map(_.value)
@@ -157,15 +156,14 @@ object A3CPredictor extends Predictor {
   /**
     * Request Cassandra to get all the data needed for a prediction
     * @param time
-    * @param cluster
     * @param conf
     * @return
     */
-  private[this] def getCassandraData(time: Long, cluster: Cluster, conf: Config): Seq[PricingPoint] = {
+  def getCassandraData(time: Long, conf: Config): Seq[PricingPoint] = {
     val cassandra = getCassandraCluster(conf)
     val session = cassandra.connect()
 
-    val keyspace = conf.getString("cassandra.currencyKeyspace")
+    val keyspace = conf.getString("cassandra.keyspace")
     val tablename = conf.getString("cassandra.currencyTable")
 
     session.execute(s"USE KEYSPACE $keyspace")
@@ -221,8 +219,27 @@ object A3CPredictor extends Predictor {
   }
 
 
-  def train(time: Long, id: String, trade: String) = {
-    trade
+  /**
+    * Train the model and store it. Return Information about the training, i.e.
+    * loss, etc.
+    *
+    * @param time
+    * @param id
+    * @param tradeJson
+    * @return
+    */
+  def train(time: Long, id: String, tradeJson: String) = {
+    val conf = ConfigFactory.load()
+
+    val trade = Json.parse(tradeJson).as[Trade]
+    val initialModel = A3CModel.load(id, conf)
+
+    val model = initialModel.train(tradeJson)
+    A3CModel.save(model, conf)
+
+
+
+    tradeJson
   }
 
 
