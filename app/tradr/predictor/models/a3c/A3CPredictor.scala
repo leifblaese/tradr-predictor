@@ -17,7 +17,8 @@ import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.api.ops.impl.transforms.Log
 import org.nd4j.linalg.factory.Nd4j
 import play.api.libs.json.Json
-import tradr.common.{PricingPoint, Trade}
+import tradr.common.PricingPoint
+import tradr.common.predictor.PredictorResult
 import tradr.predictor.models.{Model, Predictor}
 
 import scala.collection.JavaConverters._
@@ -190,7 +191,9 @@ object A3CPredictor extends Predictor {
     *
     * @return
     */
-  def predict(id: String, time: Long, conf: Config): String = {
+  def predict(time: Long, id: String): String = {
+    val conf = ConfigFactory.load()
+
     // Load the latest version of the model
     // @todo cache the model instead of loading it (play's caching)
     val model = A3CModel.load(id, conf)
@@ -207,13 +210,20 @@ object A3CPredictor extends Predictor {
 
     // @todo import recent version of the tradr-common package
     val predictorResults = PredictorResult(
-      id = 0L,
+      predictionId = 0L,
       timestamp = System.currentTimeMillis(),
       modelId = id,
       results = predictions
     )
-    
-    Json.stringify(Json.toJson[PredictorResult](predictionResult))
+
+
+    Json.stringify(Json.toJson[PredictorResult](predictorResults))
   }
+
+
+  def train(time: Long, id: String, trade: String) = {
+    trade
+  }
+
 
 }

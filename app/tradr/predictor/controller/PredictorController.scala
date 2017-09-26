@@ -1,18 +1,19 @@
-package tradr.predictor
+package tradr.predictor.controller
 
 
 import javax.inject.Inject
 
-import akka.Done
 import com.typesafe.config.ConfigFactory
-import play.api.mvc.{AbstractController, AnyContent, ControllerComponents, Request}
-import tradr.predictor.models.a3c.{A3CModel, A3CPredictor}
+import play.api.mvc.{AbstractController, ControllerComponents}
 
 import scala.concurrent.{ExecutionContext, Future}
 
 
 
 class PredictorController  @Inject()(cc: ControllerComponents) extends AbstractController(cc) {
+
+
+
 
   /**
     * Predict the action for a given time. Based on the time submitted, the predictor will collect
@@ -41,7 +42,7 @@ class PredictorController  @Inject()(cc: ControllerComponents) extends AbstractC
     * @param id id of the model that should be trained (for ensemble training)
     * @return
     */
-  def train(trade: String, id: String) = Action.async { implicit request =>
+  def train(time: Long, id: String, trade: String) = Action.async { implicit request =>
     implicit val ec = ExecutionContext.global
 
     Future {

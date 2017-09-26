@@ -8,7 +8,9 @@ import org.nd4j.linalg.api.ndarray.INDArray
 import org.nd4j.linalg.api.ops.impl.transforms.Log
 import org.nd4j.linalg.factory.Nd4j
 import play.api.libs.json.Json
-import tradr.common.Trade
+import tradr.common.trading.Trade
+import tradr.common.PricingPoint
+import tradr.common.predictor.PredictorResult
 import tradr.predictor.models.Model
 
 import scala.collection.mutable
@@ -177,6 +179,7 @@ case class A3CModel(network: ComputationGraph,
 
   def train(tradeString: String): Model = {
 //    val trade = Json.fromJson[Trade](Json.parse(tradeString))
+
 
 
 
