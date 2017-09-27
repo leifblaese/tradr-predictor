@@ -2,8 +2,10 @@ package tradr.predictor.models.a3c
 
 import java.net.{InetAddress, InetSocketAddress, Socket}
 
-import com.datastax.oss.driver.api.core.Cluster
+import com.datastax.oss.driver.api.core.{Cluster, CqlIdentifier}
+import com.datastax.oss.driver.api.core.addresstranslation.AddressTranslator
 import com.datastax.oss.driver.api.core.cql.ResultSet
+import com.datastax.oss.driver.internal.core.config.typesafe.DefaultDriverConfigLoader
 import com.typesafe.config.{Config, ConfigFactory}
 import org.deeplearning4j.nn.conf.NeuralNetConfiguration
 import org.deeplearning4j.nn.conf.inputs.InputType
@@ -25,6 +27,17 @@ import tradr.predictor.models.{Model, Predictor}
 import scala.collection.JavaConverters._
 import scala.collection.mutable
 
+
+class DockerTranslator extends AddressTranslator {
+
+  override def close(): Unit = {
+
+  }
+
+  override def translate(address: InetSocketAddress): InetSocketAddress = {
+      address
+  }
+}
 
 object A3CPredictor extends Predictor {
 
@@ -133,14 +146,25 @@ object A3CPredictor extends Predictor {
 
     val cassandraIp = conf.getString("cassandra.ip")
     val cassandraPort = conf.getString("cassandra.connectorPort").toInt
-
+    println(s"Connecting to cassandra at $cassandraIp:$cassandraPort")
     //    val inetAddress = InetAddress.getByName(s"${cassandraIp}:${cassandraPort}")
     val inetSocketAddress = InetSocketAddress.createUnresolved(cassandraIp, cassandraPort)
+    println(inetSocketAddress)
+
+    val socketList = new java.util.ArrayList[InetSocketAddress]()
+    socketList.add(inetSocketAddress)
+
+
+
+    val defaultConfig = new DefaultDriverConfigLoader()
+
 
     Cluster
       .builder()
       .addContactPoint(inetSocketAddress)
       .build()
+
+
   }
 
   /**
@@ -161,26 +185,40 @@ object A3CPredictor extends Predictor {
     */
   def getCassandraData(time: Long, conf: Config): Seq[PricingPoint] = {
     val cassandra = getCassandraCluster(conf)
-    val session = cassandra.connect()
 
     val keyspace = conf.getString("cassandra.keyspace")
     val tablename = conf.getString("cassandra.currencyTable")
 
-    session.execute(s"USE KEYSPACE $keyspace")
+    val cqlKeyspace: CqlIdentifier = CqlIdentifier.fromInternal(s"$keyspace")
+    val session = cassandra.connect(cqlKeyspace)
+
 
     // Maybe async execution? However, we have no batch, only one statement to execute
     // and we can't do anything without the data so it might as well be this simple request
-    val resultSet = session.execute(s"SELECT * from $keyspace.$tablename WHERE timestamp < $time")
+    val resultSet = session.execute(s"SELECT * from $keyspace.$tablename WHERE timestamp < $time and instrument = 'EURUSD' ALLOW FILTERING;")
+
+    var results = Seq[PricingPoint]()
+    val it = resultSet.iterator()
+    while (it.hasNext) {
+      val row = it.next
+      val point = PricingPoint(
+              timestamp = row.getLong(0),
+              currencyPair = row.getString(1),
+              value = row.getDouble(2))
+      results = results :+ point
+    }
 
     // Convert into a pricing point seq, then further into a frame (Array[Double])
-    resultSet
-      .iterator()
-      .asScala
-      .toSeq
-      .map(row => PricingPoint(
-        timestamp = row.getLong(0),
-        currencyPair = row.getString(1),
-        value = row.getDouble(2)))
+//    val results = resultSet
+//      .iterator()
+//      .asScala
+//      .toSeq
+//      .map(row => PricingPoint(
+//        timestamp = row.getLong(0),
+//        currencyPair = row.getString(1),
+//        value = row.getDouble(2)))
+//    session.close()
+    results
   }
 
 
@@ -197,8 +235,7 @@ object A3CPredictor extends Predictor {
     val model = A3CModel.load(id, conf)
 
     // Get the current frame of data
-    val cluster = getCassandraCluster(conf)
-    val currentPricingPoints = getCassandraData(time, cluster, conf)
+    val currentPricingPoints = getCassandraData(time, conf)
     val currentFrame = convertToFrame(currentPricingPoints)
 
 
