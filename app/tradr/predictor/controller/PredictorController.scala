@@ -4,14 +4,17 @@ package tradr.predictor.controller
 import javax.inject.Inject
 
 import com.typesafe.config.ConfigFactory
+import play.api.Logger
 import play.api.mvc.{AbstractController, ControllerComponents}
+import tradr.predictor.models.a3c.{A3CModel, A3CPredictor}
 
 import scala.concurrent.{ExecutionContext, Future}
 
 
 
-class PredictorController  @Inject()(cc: ControllerComponents) extends AbstractController(cc) {
+class PredictorController  @Inject()(cc: ControllerComponents) extends AbstractController(cc)  {
 
+  implicit val ec = ExecutionContext.global
 
 
 
@@ -22,12 +25,12 @@ class PredictorController  @Inject()(cc: ControllerComponents) extends AbstractC
     * @param id id of the model that should do the prediction
     * @return Json with the information about the prediction and who did it.
     */
-  def predict(time: Long, id: String) = Action.async { implicit request =>
-    implicit val ec = ExecutionContext.global
+  def predict(time: String, id: String) = Action.async { implicit request =>
     Future {
-      val conf = ConfigFactory.load()
+      Logger.info(s"time $time")
+      val prediction: String = A3CPredictor.predict(time.toLong, id)
 
-      Ok("")
+      Ok(prediction)
     }
   }
 

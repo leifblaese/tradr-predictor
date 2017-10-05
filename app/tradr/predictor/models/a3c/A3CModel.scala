@@ -1,18 +1,23 @@
 package tradr.predictor.models.a3c
 
+import java.io.File
+
 import com.typesafe.config.Config
+import org.deeplearning4j.nn.conf.{ComputationGraphConfiguration, NeuralNetConfiguration, Updater}
+import org.deeplearning4j.nn.conf.inputs.InputType
+import org.deeplearning4j.nn.conf.layers.{ConvolutionLayer, DenseLayer}
 import org.deeplearning4j.nn.gradient.{DefaultGradient, Gradient}
 import org.deeplearning4j.nn.graph.ComputationGraph
+import org.deeplearning4j.nn.weights.WeightInit
 import org.deeplearning4j.util.ModelSerializer
+import org.nd4j.linalg.activations.Activation
 import org.nd4j.linalg.api.ndarray.INDArray
-import org.nd4j.linalg.api.ops.impl.transforms.Log
 import org.nd4j.linalg.factory.Nd4j
 import play.api.libs.json.Json
 import tradr.common.trading.Trade
 import tradr.common.PricingPoint
 import tradr.common.predictor.PredictorResult
 import tradr.predictor.models.Model
-import tradr.predictor.models.a3c.A3CModel.{computeGradientMap, toGradient}
 
 import scala.collection.mutable
 import collection.JavaConverters._
@@ -29,16 +34,101 @@ object A3CModel {
     val saveFile: String = conf.getString("tradr.predictor.a3c.saveFile") + id
 
     println(s"Loading a3c network from $saveFile")
-    val network = ModelSerializer.restoreComputationGraph(saveFile)
-    network.init()
-
-    A3CModel(network)
+    val f = new File(saveFile)
+    if (f.exists()) {
+      val network = ModelSerializer.restoreComputationGraph(saveFile)
+      network.init()
+      A3CModel(network)
+    } else {
+      create(conf)
+    }
   }
 
+  def create(conf: Config): A3CModel = {
 
-  def save(model: Model, conf: Config): Unit = {
-
+    val graphConf = getComputationGraph(conf)
+    val net = new ComputationGraph(graphConf)
+    net.init()
+    A3CModel(net)
   }
+
+  def save(model: A3CModel, conf: Config, id: String): Unit = {
+
+    val saveFile: String = conf.getString("tradr.predictor.a3c.saveFile") + id
+
+    ModelSerializer.writeModel(
+      model.network,
+      saveFile,
+      true
+    )
+  }
+  /**
+    * Create a computation graph in order to get a new network.
+    * Depends on "tradr.predictor.a3c.inputsize" configuration
+    * @param conf
+    * @return
+    */
+  def getComputationGraph(conf: Config): ComputationGraphConfiguration = {
+    val inputSize = conf.getInt("tradr.predictor.a3c.inputsize")
+
+    new NeuralNetConfiguration.Builder()
+      .seed(123)
+      .graphBuilder()
+      .addInputs("frame")
+      .addLayer(
+        "layer1",
+        new ConvolutionLayer
+        .Builder(1, 5)
+          .weightInit(WeightInit.XAVIER)
+          .nIn(1)
+          .stride(5, 1)
+          .nOut(20)
+          .activation(Activation.RELU)
+          .build(),
+        "frame")
+      .addLayer(
+        "layer2",
+        new ConvolutionLayer
+        .Builder(1, 5)
+          .nIn(20)
+          .weightInit(WeightInit.XAVIER)
+          .stride(1, 2)
+          .nOut(20)
+          .activation(Activation.RELU)
+          .build(),
+        "layer1")
+      .addLayer("fc",
+        new DenseLayer
+        .Builder()
+          .weightInit(WeightInit.XAVIER)
+          .activation(Activation.RELU)
+          .nIn(1200)
+          .nOut(100)
+          .build(),
+        "layer2")
+      .addLayer(
+        "actionProbabilities",
+        new DenseLayer.Builder()
+          .nIn(100)
+          .weightInit(WeightInit.XAVIER)
+          .nOut(4)
+          .activation(Activation.SOFTMAX)
+          .build(),
+        "fc")
+      .addLayer(
+        "valueFunction",
+        new DenseLayer.Builder()
+          .weightInit(WeightInit.XAVIER)
+          .nIn(100)
+          .nOut(1)
+          .activation(Activation.IDENTITY)
+          .build(),
+        "fc")
+      .setOutputs("actionProbabilities", "valueFunction")
+      .setInputTypes(InputType.convolutionalFlat(1, inputSize, 1))
+      .build()
+  }
+
 
 
   /**
@@ -117,8 +207,10 @@ object A3CModel {
 
 }
 
-case class A3CModel(network: ComputationGraph,
-               gamma: Double = 0.99) extends Model {
+case class A3CModel(
+                   network: ComputationGraph,
+                    gamma: Double = 0.99
+                   ) extends Model {
 
   /**
     * Predict for a given frame and return the action probabilities
@@ -161,13 +253,13 @@ case class A3CModel(network: ComputationGraph,
     * @param json
     * @return
     */
-  def train(json: String): Model = {
+  def train(json: String): A3CModel = {
     val trade = Json.parse(json).as[Trade]
 
     val partialTrade = trade.tradeSequence.head
     val profit = Trade.computeProfit(trade)
-    val gradientMap = computeGradientMap(network, trade, gamma, profit)
-    val gradient = toGradient(gradientMap)
+    val gradientMap = A3CModel.computeGradientMap(network, trade, gamma, profit)
+    val gradient = A3CModel.toGradient(gradientMap)
     network.update(gradient)
 
     this

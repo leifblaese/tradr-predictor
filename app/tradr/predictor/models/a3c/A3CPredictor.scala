@@ -7,17 +7,8 @@ import com.datastax.oss.driver.api.core.addresstranslation.AddressTranslator
 import com.datastax.oss.driver.api.core.cql.ResultSet
 import com.datastax.oss.driver.internal.core.config.typesafe.DefaultDriverConfigLoader
 import com.typesafe.config.{Config, ConfigFactory}
-import org.deeplearning4j.nn.conf.NeuralNetConfiguration
-import org.deeplearning4j.nn.conf.inputs.InputType
-import org.deeplearning4j.nn.conf.layers.{ConvolutionLayer, DenseLayer}
-import org.deeplearning4j.nn.gradient.{DefaultGradient, Gradient}
-import org.deeplearning4j.nn.graph.ComputationGraph
-import org.deeplearning4j.nn.weights.WeightInit
 import org.deeplearning4j.util.ModelSerializer
-import org.nd4j.linalg.activations.Activation
-import org.nd4j.linalg.api.ndarray.INDArray
-import org.nd4j.linalg.api.ops.impl.transforms.Log
-import org.nd4j.linalg.factory.Nd4j
+import play.api.Logger
 import play.api.libs.json.Json
 import tradr.common.PricingPoint
 import tradr.common.predictor.PredictorResult
@@ -41,73 +32,6 @@ class DockerTranslator extends AddressTranslator {
 
 object A3CPredictor extends Predictor {
 
-  /**
-    * Create a computation graph in order to get a new network.
-    * Depends on "tradr.predictor.a3c.inputsize" configuration
-    * @param conf
-    * @return
-    */
-  private[this] def getComputationGraph(conf: Config) = {
-    val inputSize = conf.getInt("tradr.predictor.a3c.inputsize")
-
-    new NeuralNetConfiguration.Builder()
-      .seed(123)
-      .graphBuilder()
-      .addInputs("frame")
-      .addLayer(
-        "layer1",
-        new ConvolutionLayer
-        .Builder(1, 5)
-          .weightInit(WeightInit.XAVIER)
-          .nIn(1)
-          .stride(5, 1)
-          .nOut(20)
-          .activation(Activation.RELU)
-          .build(),
-        "frame")
-      .addLayer(
-        "layer2",
-        new ConvolutionLayer
-        .Builder(1, 5)
-          .nIn(20)
-          .weightInit(WeightInit.XAVIER)
-          .stride(1, 2)
-          .nOut(20)
-          .activation(Activation.RELU)
-          .build(),
-        "layer1")
-      .addLayer("fc",
-        new DenseLayer
-        .Builder()
-          .weightInit(WeightInit.XAVIER)
-          .activation(Activation.RELU)
-          .nIn(2480)
-          .nOut(100)
-          .build(),
-        "layer2")
-      .addLayer(
-        "actionProbabilities",
-        new DenseLayer.Builder()
-          .nIn(100)
-          .weightInit(WeightInit.XAVIER)
-          .nOut(4)
-          .activation(Activation.SOFTMAX)
-          .build(),
-        "fc")
-      .addLayer(
-        "valueFunction",
-        new DenseLayer.Builder()
-          .weightInit(WeightInit.XAVIER)
-          .nIn(100)
-          .nOut(1)
-          .activation(Activation.IDENTITY)
-          .build(),
-        "fc")
-      .setOutputs("actionProbabilities", "valueFunction")
-      .setInputTypes(InputType.convolutionalFlat(1, inputSize, 1))
-      .build()
-  }
-
 
   /**
     * Save a trained network to disk. Per default it overwrites the last saved network
@@ -122,24 +46,24 @@ object A3CPredictor extends Predictor {
     ModelSerializer.writeModel(a3c.network, saveFile, saveUpdater)
   }
 
-  /**
-    * Introduce some random noise in the network in case you want to have multiple agents
-    * for training that are loaded from the same pre-trained network but should then not behave
-    * the same
-    * @param network
-    */
-  def introduceVariation(network: ComputationGraph): Unit = {
-
-    val paramTable = network.paramTable().asScala
-    paramTable.foreach{
-      case (key, param) =>
-        val newParam = Nd4j
-          .rand(param.ordering(), param.shape())
-          .mul(1.0e-6)
-          .add(param)
-        network.setParam(key, newParam)
-    }
-  }
+//  /**
+//    * Introduce some random noise in the network in case you want to have multiple agents
+//    * for training that are loaded from the same pre-trained network but should then not behave
+//    * the same
+//    * @param network
+//    */
+//  def introduceVariation(network: ComputationGraph): Unit = {
+//
+//    val paramTable = network.paramTable().asScala
+//    paramTable.foreach{
+//      case (key, param) =>
+//        val newParam = Nd4j
+//          .rand(param.ordering(), param.shape())
+//          .mul(1.0e-6)
+//          .add(param)
+//        network.setParam(key, newParam)
+//    }
+//  }
 
 
   def getCassandraCluster(conf: Config) = {
@@ -163,18 +87,24 @@ object A3CPredictor extends Predictor {
       .builder()
       .addContactPoint(inetSocketAddress)
       .build()
-
-
   }
 
   /**
     * Convert the data from cassandra into a (multidimensional) frame
     */
-  def convertToFrame(pricingPoints: Seq[PricingPoint]) = {
-    pricingPoints
+  def convertToFrame(pricingPoints: Seq[PricingPoint], inputSize: Int) = {
+    val f = pricingPoints
       .sortBy(p => p.timestamp)
       .map(_.value)
       .toArray
+
+    if (f.size < inputSize) {
+      val rem = inputSize - f.size
+      Array.fill(rem)(1.0) ++ f
+    } else {
+      f
+    }
+
   }
 
   /**
@@ -236,9 +166,9 @@ object A3CPredictor extends Predictor {
 
     // Get the current frame of data
     val currentPricingPoints = getCassandraData(time, conf)
-    val currentFrame = convertToFrame(currentPricingPoints)
 
-
+    val inputSize = conf.getInt("tradr.predictor.inputSize")
+    val currentFrame = convertToFrame(currentPricingPoints, inputSize)
 
     // Predict probability distribution over the actions
     val predictions: Map[String, Array[Double]] = model.predict(currentFrame)
@@ -272,7 +202,7 @@ object A3CPredictor extends Predictor {
     val initialModel = A3CModel.load(id, conf)
 
     val model = initialModel.train(tradeJson)
-    A3CModel.save(model, conf)
+    A3CModel.save(model, conf, id)
 
 
 

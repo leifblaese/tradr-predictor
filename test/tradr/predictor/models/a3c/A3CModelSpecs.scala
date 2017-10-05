@@ -10,10 +10,10 @@ import tradr.predictor.models.a3c.A3CPredictor.getCassandraCluster
 
 class A3CModelSpecs extends Specification {
 
-
-  "Specs2 is working" >> {
-    1 must be_==(1)
-  }
+//
+//  "Specs2 is working" >> {
+//    1 must be_==(1)
+//  }
 //
 //  "We can connect to cassandra" >> {
 //    val conf = ConfigFactory.parseFile(new File("/home/leifblaese/Dropbox/Privat/Tradr/production.conf"))
@@ -32,6 +32,16 @@ class A3CModelSpecs extends Specification {
 //
 //    Success("Yeah")
 //  }
+
+  "We can use the model to predict something" >> {
+
+    val conf = ConfigFactory.parseFile(new File("/home/leifblaese/Dropbox/Privat/Tradr/production.conf"))
+//    val network = A3CModel.getComputationGraph(conf)
+    println(conf)
+
+
+    Success("Yeah")
+  }
 
 
 }

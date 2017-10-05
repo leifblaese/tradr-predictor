@@ -4,18 +4,18 @@
 lazy val libdeps = Seq(
   guice,
   "org.scalatestplus.play" %% "scalatestplus-play" % "3.1.0" % Test,
-  "org.deeplearning4j" % "deeplearning4j-core" % "0.9.1",
-  "org.nd4j" % "nd4j-native-platform" % "0.9.1",
   "com.typesafe" % "config" % "1.3.1",
   "com.datastax.oss" % "java-driver-parent" % "4.0.0-alpha1" pomOnly(),
   "com.datastax.oss" % "java-driver-core" % "4.0.0-alpha1",
-  "org.specs2" % "specs2_2.11" % "3.7" % "test" pomOnly()
+  "org.specs2" % "specs2_2.11" % "3.7" % "test" pomOnly(),
+  "org.deeplearning4j" % "deeplearning4j-core" % "0.9.1",
+  "org.nd4j" % "nd4j-native-platform" % "0.9.1"
 )
 
 
 lazy val root = (project in file("."))
-  .enablePlugins(PlayScala)
-    .settings(Seq(
+  .enablePlugins(PlayScala, sbtdocker.DockerPlugin, JavaAppPackaging)
+  .settings(Seq(
       name := "tradr-predictor",
       organization := "tradr",
       scalaVersion := "2.12.2",
