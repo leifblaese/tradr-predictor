@@ -4,12 +4,9 @@
 lazy val libdeps = Seq(
   guice,
   "org.scalatestplus.play" %% "scalatestplus-play" % "3.1.0" % Test,
-  "com.typesafe" % "config" % "1.3.1",
-  "com.datastax.oss" % "java-driver-parent" % "4.0.0-alpha1" pomOnly(),
-  "com.datastax.oss" % "java-driver-core" % "4.0.0-alpha1",
   "org.specs2" % "specs2_2.11" % "3.7" % "test" pomOnly(),
-  "org.deeplearning4j" % "deeplearning4j-core" % "0.9.1",
-  "org.nd4j" % "nd4j-native-platform" % "0.9.1"
+  "tradr" %% "tradr-common" % "0.0.+",
+  "tradr" %% "tradr-models" % "0.0.+"
 )
 
 
